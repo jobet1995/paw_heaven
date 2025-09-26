@@ -98,7 +98,9 @@ jobs:
           push: true
           tags: ${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_TAG }},${{ env.DOCKER_IMAGE }}:latest
           cache-from: type=gha
-          cache-to: type=ghac,mode=max
+          cache-to: type=inline
+          build-args: |
+            NODE_ENV=production
 
       # 5. Deploy to remote server
       - name: Install SSH key

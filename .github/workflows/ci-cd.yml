@@ -1,0 +1,131 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  DOCKER_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/paws-heaven
+  DOCKER_TAG: ${{ github.sha }}
+  CONTAINER_NAME: paws-heaven
+  SSH_HOST: ${{ secrets.SSH_HOST }}
+  SSH_USER: ${{ secrets.SSH_USER }}
+  SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+  REMOTE_DOCKER_COMPOSE: /path/to/your/project/docker-compose.yml
+  REMOTE_PROJECT_DIR: /path/to/your/project
+
+jobs:
+  build-and-deploy:
+    name: Build and Deploy
+    runs-on: ubuntu-latest
+    
+    steps:
+      # 1. Checkout code
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # 2. Set up Node.js
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+          cache-dependency-path: '**/package-lock.json'
+
+      # 3. Install dependencies and build the app
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build application
+        run: npm run build
+
+      # 4. Build and push Docker image
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          tags: ${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_TAG }},${{ env.DOCKER_IMAGE }}:latest
+          cache-from: type=gha
+          cache-to: type=ghac,mode=max
+
+      # 5. Deploy to remote server
+      - name: Install SSH key
+        uses: shimataro/ssh-key-action@v2
+        with:
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          known_hosts: 'just-a-placeholder-so-we-dont-get-errors'
+
+      - name: Adding Known Hosts
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
+
+      - name: Deploy to server
+        run: |
+          # Create necessary directories
+          ssh -o StrictHostKeyChecking=no ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "
+            mkdir -p ${{ env.REMOTE_PROJECT_DIR }}
+          "
+          
+          # Update docker-compose.yml with the new image
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "
+            cd ${{ env.REMOTE_PROJECT_DIR}} && \
+            echo 'version: \"3.8\"
+
+            services:
+              frontend:
+                image: ${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_TAG }}
+                container_name: ${{ env.CONTAINER_NAME }}
+                restart: always
+                ports:
+                  - "80:80"
+                networks:
+                  - paws-network
+
+            networks:
+              paws-network:
+                driver: bridge' > docker-compose.yml
+
+            # Pull the new image and restart containers
+            docker-compose pull
+            docker-compose up -d --force-recreate --remove-orphans
+            
+            # Clean up old images
+            docker image prune -af --filter "until=24h"
+          "
+
+      # 6. Health check
+      - name: Verify deployment
+        run: |
+          echo "Waiting for application to be ready..."
+          sleep 30
+          curl -f http://${{ env.SSH_HOST }} || exit 1
+
+      # 7. Notify on success
+      - name: Send success notification
+        if: success()
+        run: |
+          echo "Deployment to production successful!"
+          # Add notification logic here (e.g., Slack, Discord, etc.)
+
+      # 8. Notify on failure
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "Deployment failed!"
+          # Add failure notification logic here

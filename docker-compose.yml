@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: .
+      target: ${BUILD_TARGET:-production}
+      args:
+        - NODE_ENV=${NODE_ENV:-production}
+    container_name: paws-heaven-frontend
+    ports:
+      - "8080:80"
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/dist
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - VITE_API_BASE_URL=${VITE_API_BASE_URL:-/api}
+    restart: unless-stopped
+    networks:
+      - paws-network
+    # Override command for development
+    command: >
+      sh -c "if [ "$$NODE_ENV" = "development" ]; then 
+        npm install && npm run dev;
+      else 
+        nginx -g 'daemon off;'; 
+      fi"
+
+networks:
+  paws-network:
+    driver: bridge
+    name: paws-heaven-network

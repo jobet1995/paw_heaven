@@ -54,11 +54,19 @@ jobs:
           # Check if package-lock.json exists, if not generate it
           if [ ! -f package-lock.json ]; then
             echo "package-lock.json not found. Generating..."
-            npm install --package-lock-only
+            # Temporarily remove prepare script to avoid Cypress installation
+            npm pkg delete scripts.prepare
+            # Generate lock file without running prepare script
+            npm install --package-lock-only --ignore-scripts
           fi
           
           # Now run npm ci with the lock file
-          npm ci
+          npm ci --ignore-scripts
+          
+          # Install Cypress separately if needed for tests
+          if [ -f "cypress.config.js" ]; then
+            npx cypress install
+          fi
 
       - name: Run tests
         run: npm test

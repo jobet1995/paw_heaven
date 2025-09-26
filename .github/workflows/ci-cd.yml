@@ -50,7 +50,15 @@ jobs:
 
       # 3. Install dependencies and build the app
       - name: Install dependencies
-        run: npm ci
+        run: |
+          # Check if package-lock.json exists, if not generate it
+          if [ ! -f package-lock.json ]; then
+            echo "package-lock.json not found. Generating..."
+            npm install --package-lock-only
+          fi
+          
+          # Now run npm ci with the lock file
+          npm ci
 
       - name: Run tests
         run: npm test

@@ -170,12 +170,23 @@ jobs:
           echo "- SSH_HOST"
           echo "- SSH_USER"
 
-      # 6. Health check
+      # 6. Health check (only if deployment was performed)
       - name: Verify deployment
+        if: steps.check-deploy.outputs.deploy_enabled == 'true'
         run: |
           echo "Waiting for application to be ready..."
           sleep 30
-          curl -f http://${{ env.SSH_HOST }} || exit 1
+          # Use the SSH_HOST from secrets if available, otherwise use a default
+          DEPLOY_HOST="${{ secrets.SSH_HOST || 'localhost' }}"
+          # Remove any protocol prefix and trailing slashes
+          DEPLOY_HOST=${DEPLOY_HOST#*//}
+          DEPLOY_HOST=${DEPLOY_HOST%%/*}
+          
+          echo "Checking http://$DEPLOY_HOST"
+          curl -f http://$DEPLOY_HOST || {
+            echo "Health check failed for http://$DEPLOY_HOST"
+            exit 1
+          }
 
       # 7. Notify on success
       - name: Send success notification

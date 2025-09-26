@@ -26,19 +26,24 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # 2. Set up Node.js with improved caching
+      # 2. Set up Node.js with simplified caching
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '20.x'
-          cache: 'npm'
-          cache-dependency-path: 'package-lock.json'  # Simplified path
-
-      - name: Cache Node.js modules
+          
+      - name: Get npm cache directory
+        id: npm-cache-dir
+        run: |
+          echo "dir=$(npm config get cache)" >> $GITHUB_OUTPUT
+          
+      - name: Cache node modules
         uses: actions/cache@v3
-        id: npm-cache
+        id: cache-node-modules
         with:
-          path: ~/.npm
+          path: |
+            ~/.npm
+            node_modules
           key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-node-

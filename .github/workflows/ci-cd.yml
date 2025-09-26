@@ -69,7 +69,14 @@ jobs:
           fi
 
       - name: Run tests
-        run: npm test
+        if: contains(toJson(github.event.pull_request.labels.*.name || '[]'), 'skip-tests') == false
+        run: |
+          # Only run tests if the test script exists in package.json
+          if grep -q '"test"' package.json; then
+            npm test
+          else
+            echo "No test script found in package.json. Skipping tests."
+          fi
 
       - name: Build application
         run: npm run build

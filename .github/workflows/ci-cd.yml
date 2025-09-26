@@ -102,19 +102,32 @@ jobs:
           build-args: |
             NODE_ENV=production
 
-      # 5. Deploy to remote server
+      # 5. Deploy to remote server (only if all required secrets are provided)
+      - name: Check if deployment is needed
+        id: check-deploy
+        run: |
+          if [ -z "${{ secrets.SSH_PRIVATE_KEY }}" ] || [ -z "${{ secrets.SSH_KNOWN_HOSTS }}" ] || [ -z "${{ secrets.SSH_HOST }}" ] || [ -z "${{ secrets.SSH_USER }}" ]; then
+            echo "::notice::Skipping deployment: Missing required deployment secrets"
+            echo "deploy_enabled=false" >> $GITHUB_OUTPUT
+          else
+            echo "deploy_enabled=true" >> $GITHUB_OUTPUT
+          fi
+
       - name: Install SSH key
+        if: steps.check-deploy.outputs.deploy_enabled == 'true'
         uses: shimataro/ssh-key-action@v2
         with:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           known_hosts: 'just-a-placeholder-so-we-dont-get-errors'
 
       - name: Adding Known Hosts
+        if: steps.check-deploy.outputs.deploy_enabled == 'true'
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
 
       - name: Deploy to server
+        if: steps.check-deploy.outputs.deploy_enabled == 'true'
         run: |
           # Create necessary directories
           ssh -o StrictHostKeyChecking=no ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "
@@ -147,6 +160,15 @@ jobs:
             # Clean up old images
             docker image prune -af --filter "until=24h"
           "
+      
+      - name: Skip deployment
+        if: steps.check-deploy.outputs.deploy_enabled != 'true'
+        run: |
+          echo "Skipping deployment. To enable deployment, set the following secrets in your repository:"
+          echo "- SSH_PRIVATE_KEY"
+          echo "- SSH_KNOWN_HOSTS"
+          echo "- SSH_HOST"
+          echo "- SSH_USER"
 
       # 6. Health check
       - name: Verify deployment
